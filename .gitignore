@@ -1,0 +1,22 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+
+# Virtual environments
+.venv
+
+# Project folders - ignore contents but keep structure
+work/*
+!work/.gitkeep
+logs/*
+!logs/.gitkeep
+output/*
+!output/.gitkeep
+input/*
+!input/.gitkeep
+glossary/*
+!glossary/.gitkeep
