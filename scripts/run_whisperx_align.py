@@ -1,29 +1,34 @@
-# scripts/run_whisperx_align.py
-import torch, json, os, whisperx
+import json, os
+from pathlib import Path
 
-AUDIO = "work/audio/video_clean.wav"  # ou vocals
-STT_JSON = "work/stt/video_stt.json"
-MODEL_NAME = "large-v3"  # só para carregar metadata se quiser; alinhamento usa modelo acústico separado
+class WhisperXAlign:
+    def __init__(self, video_name):
+        self.video_name = video_name
+        self.audio_path = f"work/audio/{Path(video_name).stem}_clean.wav"
+        self.stt_json_path = f"work/stt/{Path(video_name).stem}_stt.json"
+        self.output_path = f"work/stt/{Path(video_name).stem}_words_aligned.json"
+        self.batch_size = 16
 
-device = "cuda" if torch.cuda.is_available() else "cpu"
-batch_size = 16
+    def process(self):
+        import torch, whisperx
+        
+        self.device = "cuda" if torch.cuda.is_available() else "cpu"
+        # 1) Carrega segmentos do Faster-Whisper
+        data = json.load(open(self.stt_json_path,"r",encoding="utf-8"))
+        segments = [{"start": s["start"], "end": s["end"], "text": s["text"]} for s in data["segments"]]
 
-# 1) Carrega segmentos do Faster-Whisper
-data = json.load(open(STT_JSON,"r",encoding="utf-8"))
-segments = [{"start": s["start"], "end": s["end"], "text": s["text"]} for s in data["segments"]]
+        # 2) Carrega modelo de alinhamento
+        model_a, metadata = whisperx.load_align_model(language_code="pt", device=self.device)
 
-# 2) Carrega modelo de alinhamento
-model_a, metadata = whisperx.load_align_model(language_code="pt", device=device)
+        # 3) Realiza alinhamento
+        result_aligned = whisperx.align(segments, model_a, metadata, self.audio_path, self.device, return_char_alignments=False)
 
-# 3) Realiza alinhamento
-result_aligned = whisperx.align(segments, model_a, metadata, AUDIO, device, return_char_alignments=False)
+        # 4) Mescla de volta no JSON
+        for s, a in zip(data["segments"], result_aligned["segments"]):
+            s["words"] = a.get("words", [])
 
-# 4) Mescla de volta no JSON
-for s, a in zip(data["segments"], result_aligned["segments"]):
-    s["words"] = a.get("words", [])  # [{'word':'...', 'start':..., 'end':..., 'score':...}, ...]
+        os.makedirs("work/stt", exist_ok=True)
+        with open(self.output_path,"w",encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
 
-os.makedirs("work/stt", exist_ok=True)
-with open("work/stt/video_words_aligned.json","w",encoding="utf-8") as f:
-    json.dump(data, f, ensure_ascii=False, indent=2)
-
-print("OK: work/stt/video_words_aligned.json gerado")
+        print(f"OK: {self.output_path} gerado")
